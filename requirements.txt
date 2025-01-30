@@ -1,0 +1,4 @@
+openai
+cursorai
+vercel
+awscli
