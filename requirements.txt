@@ -1,4 +1,5 @@
-openai
-cursorai
+flask==2.3.2
+# cursorai - Uncomment and specify version if needed
 vercel
 awscli
+# Add any other necessary dependencies here

@@ -1,3 +1,6 @@
+import sys
+print("DEBUG: Python interpreter path:", sys.executable)
+
 from flask import Flask, jsonify
 
 app = Flask(__name__)
@@ -15,4 +18,4 @@ def api_status():
     return jsonify({'status': 'API is working'})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(port=3001)
