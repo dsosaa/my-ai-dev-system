@@ -1,0 +1,1 @@
+# GitHub Copilot, generate a script for AI debugging using OpenAI and CursorAI

@@ -1,0 +1,1 @@
+# GitHub Copilot, generate a Mac installer script for packaging this AI system into a .pkg installer

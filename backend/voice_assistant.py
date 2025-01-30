@@ -1,0 +1,1 @@
+# GitHub Copilot, generate an AI-driven voice assistant script with command recognition and execution
