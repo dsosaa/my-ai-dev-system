@@ -48,6 +48,20 @@ fi
 
 print_info "✅ Local dependencies OK."
 
+# Check for missing dependencies
+if ! command -v python3 &> /dev/null; then
+    echo "Python3 is not installed. Please install it."
+    exit 1
+fi
+
+if ! command -v npm &> /dev/null; then
+    echo "npm is not installed. Please install Node.js and npm."
+    exit 1
+fi
+
+# Check for syntax errors
+# Ensure all commands are properly formatted and paths are correct
+
 # ─────────────────────────────────────────────────────────────────────────
 # 2. Offer Staged Onboarding (Wizard for Cloud Choices)
 # ─────────────────────────────────────────────────────────────────────────
@@ -56,7 +70,7 @@ print_step "Cloud Hosting Preference Wizard"
 echo "Which environment do you plan to use for hosting?"
 echo "1) GitHub Codespaces + Vercel (default, recommended for novices)"
 echo "2) AWS (EC2 / ECS / Lambda) or a custom Docker solution"
-echo "3) I’m just exploring locally with Docker"
+echo "3) I'm just exploring locally with Docker"
 read -p "Enter choice (1,2,3): " environment_choice
 
 case "$environment_choice" in
