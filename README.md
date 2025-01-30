@@ -56,3 +56,6 @@
 - **Common Errors:**
   - Ensure all environment variables are set.
   - Check for missing dependencies in `requirements.txt` or `package.json`.
+
+## Troubleshooting
+**ImportError**: If you encounter `ModuleNotFoundError: No module named 'backend'`, ensure an `__init__.py` file is placed in the `backend` folder. This designates `backend` as a Python package, resolving the import error.
