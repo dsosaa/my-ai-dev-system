@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# AWS Configuration
+AWS_ACCOUNT_ID="108613986753"
+AWS_REGION="us-west-2"
+ECR_REPO="my-ai-dev-system"
+ECS_CLUSTER="my-ai-cluster"
+ECS_TASK="my-ai-task"
+ECS_SERVICE="my-ai-service"
+SUBNETS="subnet-015cd8eef389cc15f,subnet-0cb4b289cb9118ec9,subnet-056c2e97fdadb6739,subnet-07f8e24b141a67c9f"
+SECURITY_GROUP="sg-0ba13788585c194be"
+
+# Ensure AWS CLI is authenticated
+echo "🔍 Checking AWS CLI authentication..."
+aws sts get-caller-identity >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "❌ AWS CLI is not authenticated. Run 'aws configure' first."
+    exit 1
+fi
+
+# Step 1: Verify AWS ECR Image
+echo "🔍 Checking for Docker image in AWS ECR..."
+IMAGE_EXISTS=$(aws ecr list-images --repository-name $ECR_REPO --region $AWS_REGION --query 'imageIds[*].imageTag' --output text)
+
+if [[ -z "$IMAGE_EXISTS" ]]; then
+    echo "❌ No Docker image found in ECR. Pushing image..."
+    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+    docker tag my-ai-dev-system:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
+    docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
+else
+    echo "✅ Docker image exists in AWS ECR."
+fi
+
+# Step 2: Create or Reset ECS Cluster
+echo "🔄 Ensuring ECS Cluster Exists..."
+aws ecs describe-clusters --clusters $ECS_CLUSTER --region $AWS_REGION >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "📌 Creating ECS Cluster..."
+    aws ecs create-cluster --cluster-name $ECS_CLUSTER --region $AWS_REGION
+else
+    echo "✅ ECS Cluster already exists."
+fi
+
+# Step 3: Register Task Definition
+echo "📌 Registering Task Definition..."
+aws ecs register-task-definition \
+    --family $ECS_TASK \
+    --network-mode awsvpc \
+    --requires-compatibilities FARGATE \
+    --cpu "256" --memory "512" \
+    --execution-role-arn arn:aws:iam::$AWS_ACCOUNT_ID:role/ecsTaskExecutionRole \
+    --container-definitions "[
+      {
+        \"name\": \"my-ai-container\",
+        \"image\": \"$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest\",
+        \"memory\": 512,
+        \"cpu\": 256,
+        \"essential\": true,
+        \"portMappings\": [
+          {
+            \"containerPort\": 3001,
+            \"hostPort\": 3001
+          }
+        ]
+      }
+    ]" --region $AWS_REGION
+
+# Step 4: Create ECS Service
+echo "🚀 Deploying ECS Service..."
+aws ecs create-service \
+    --cluster $ECS_CLUSTER \
+    --service-name $ECS_SERVICE \
+    --task-definition $ECS_TASK \
+    --launch-type FARGATE \
+    --desired-count 1 \
+    --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+    --region $AWS_REGION >/dev/null 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "⚠️ ECS Service creation failed. Checking for existing service..."
+    SERVICE_EXISTS=$(aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE --region $AWS_REGION --query 'services[0].status' --output text)
+    if [[ "$SERVICE_EXISTS" != "ACTIVE" ]]; then
+        echo "❌ Service does not exist or failed to start. Please check your AWS ECS console."
+        exit 1
+    fi
+else
+    echo "✅ ECS Service created successfully."
+fi
+
+# Step 5: Wait for Task to Start
+echo "⏳ Waiting for ECS Task to start..."
+sleep 20  # Allow time for ECS to start the task
+
+TASK_ARN=$(aws ecs list-tasks --cluster $ECS_CLUSTER --desired-status RUNNING --region $AWS_REGION --query 'taskArns[0]' --output text)
+if [[ "$TASK_ARN" == "None" ]]; then
+    echo "❌ No running ECS tasks found. Deployment may have failed."
+    exit 1
+fi
+
+# Step 6: Get Public IP of the Running Task
+echo "🔎 Getting public IP..."
+ENI_ID=$(aws ecs describe-tasks --cluster $ECS_CLUSTER --tasks $TASK_ARN --region $AWS_REGION --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
+PUBLIC_IP=$(aws ec2 describe-network-interfaces --region $AWS_REGION --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+
+if [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]]; then
+    echo "❌ Could not find public IP. Make sure security group allows inbound traffic on port 3001."
+    exit 1
+fi
+
+echo "✅ Flask API is running at: http://$PUBLIC_IP:3001/status
+
+# Step 7: Test the API
+curl -s http://$PUBLIC_IP:3001/status || echo "⚠️ API might not be responding. Check logs.
