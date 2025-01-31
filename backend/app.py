@@ -19,3 +19,16 @@ def api_status():
 
 if __name__ == "__main__":
     app.run(port=3001)
+
+# AI Debugging API
+import openai
+from flask import request
+
+@app.route('/debug', methods=['POST'])
+def ai_debug():
+    code_snippet = request.json.get('code')
+    response = openai.ChatCompletion.create(
+        model='gpt-4',
+        messages=[{'role': 'user', 'content': f'Debug this code: {code_snippet}'}]
+    )
+    return {'debug_suggestions': response['choices'][0]['message']['content']}
